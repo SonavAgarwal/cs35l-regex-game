@@ -10,8 +10,8 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Regex Kahoot",
-  description: "Real-time regex showdowns with Convex.",
+  title: "Regex Rave",
+  description: "Fun competition practicing regular expressions!",
 };
 
 export default function RootLayout({

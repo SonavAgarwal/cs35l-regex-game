@@ -58,6 +58,7 @@ export default function Home() {
   const [lastSubmittedQuestion, setLastSubmittedQuestion] = useState<
     string | null
   >(null);
+  const [isInputLocked, setIsInputLocked] = useState(false);
   const [kickedMessage, setKickedMessage] = useState<string | null>(null);
 
   useEffect(() => {
@@ -106,6 +107,7 @@ export default function Home() {
     setRegexInput("");
     setStatusMessage(null);
     setLastSubmittedQuestion(null);
+    setIsInputLocked(false);
   }, [gameState?.question?.id]);
 
   useEffect(() => {
@@ -114,6 +116,7 @@ export default function Home() {
       setSession(null);
       setRegexInput("");
       setStatusMessage(null);
+      setIsInputLocked(false);
       setKickedMessage("You were removed by the host.");
     }
   }, [gameState?.playerStatus]);
@@ -232,6 +235,7 @@ export default function Home() {
     setSession(null);
     setRegexInput("");
     setStatusMessage(null);
+    setIsInputLocked(false);
   };
 
   const handleSubmit = async () => {
@@ -254,6 +258,9 @@ export default function Home() {
       setStatusMessage(
         `Score ${result.score}${bonusLine} (${result.fullScore ? "full" : "partial"})`,
       );
+      if (result.fullScore) {
+        setIsInputLocked(true);
+      }
     } catch (error) {
       setStatusMessage(
         error instanceof Error ? error.message : "Submission failed.",
@@ -268,9 +275,7 @@ export default function Home() {
           <header className="border-2 border-black bg-white px-6 py-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex flex-col gap-1">
-                <h1 className="text-2xl font-semibold uppercase">
-                  Regex Kahoot
-                </h1>
+                <h1 className="text-2xl font-semibold uppercase">Regex Rave</h1>
               </div>
               <div className="flex items-center gap-3 text-xs uppercase">
                 <Link
@@ -360,7 +365,7 @@ export default function Home() {
                     onChange={(event) => setRegexInput(event.target.value)}
                     className="border-2 border-black bg-transparent px-3 py-3 text-4xl"
                     placeholder="/pattern/g"
-                    disabled={!gameState.questionOpen}
+                    disabled={!gameState.questionOpen || isInputLocked}
                   />
                   {statusMessage ? (
                     <p className="text-base uppercase">{statusMessage}</p>

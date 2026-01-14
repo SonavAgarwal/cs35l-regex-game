@@ -95,6 +95,15 @@ function normalizeHeader(value: string) {
   return value.trim().toLowerCase();
 }
 
+function decodeTargetString(value: string) {
+  return value
+    .replace(/\\\\/g, "\\")
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "\r")
+    .replace(/\\t/g, "\t")
+    .replace(/\\"/g, '"');
+}
+
 export default function RunnerPage() {
   const createGame = useMutation(api.game.createGame);
   const addQuestions = useMutation(api.game.addQuestions);
@@ -241,7 +250,7 @@ export default function RunnerPage() {
     }
     const nextQuestions: ParsedQuestion[] = [];
     for (const row of rows.slice(1)) {
-      const targetString = row[idxTarget]?.trim() ?? "";
+      const targetString = decodeTargetString(row[idxTarget]?.trim() ?? "");
       const rawRegex = row[idxAnswer]?.trim() ?? "";
       const answerRegex = rawRegex.replace(/\\\\/g, "\\");
       const timeValue = row[idxTime]?.trim() ?? "";
