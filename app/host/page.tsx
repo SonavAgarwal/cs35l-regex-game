@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import HighlightedText from "@/components/HighlightedText";
+import { api } from "@/convex/_generated/api";
+import { useMutation, useQuery } from "convex/react";
+import { useEffect, useMemo, useState } from "react";
 
 const HOST_SESSION_KEY = "regex_kahoot_host_session";
 const HOST_UID_COOKIE = "regex_host_uid";
@@ -41,6 +41,13 @@ function getOrCreateHostUid() {
     const uid = crypto.randomUUID();
     setCookie(HOST_UID_COOKIE, uid, 365);
     return uid;
+}
+
+function getInitialHostUid() {
+    if (typeof document === "undefined") {
+        return null;
+    }
+    return getOrCreateHostUid();
 }
 
 function parseCsv(text: string) {
@@ -123,7 +130,7 @@ export default function RunnerPage() {
     const [maxTimeLeft, setMaxTimeLeft] = useState<number | null>(null);
     const [csvText, setCsvText] = useState("");
     const [csvFileName, setCsvFileName] = useState("");
-    const [hostUid, setHostUid] = useState<string | null>(null);
+    const [hostUid] = useState<string | null>(() => getInitialHostUid());
     const [showSolution, setShowSolution] = useState(false);
 
     const gameState = useQuery(
@@ -134,8 +141,9 @@ export default function RunnerPage() {
     );
 
     useEffect(() => {
-        const uid = getOrCreateHostUid();
-        setHostUid(uid);
+        if (!hostUid) {
+            return;
+        }
         const stored = localStorage.getItem(HOST_SESSION_KEY);
         if (!stored) {
             return;
@@ -145,7 +153,7 @@ export default function RunnerPage() {
             if (!parsed.code) {
                 return;
             }
-            void resumeHost({ code: parsed.code, hostUid: uid })
+            void resumeHost({ code: parsed.code, hostUid })
                 .then((result) => {
                     setGameId(result.gameId);
                     setGameCode(result.code);
@@ -157,10 +165,11 @@ export default function RunnerPage() {
             console.error("Failed to parse host session:", error);
             localStorage.removeItem(HOST_SESSION_KEY);
         }
-    }, [resumeHost]);
+    }, [resumeHost, hostUid]);
 
     useEffect(() => {
         if (!gameState?.question) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTimeLeft(null);
             setMaxTimeLeft(null);
             return;
@@ -183,6 +192,7 @@ export default function RunnerPage() {
     ]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setShowSolution(false);
     }, [gameState?.question?.id]);
 
@@ -190,6 +200,7 @@ export default function RunnerPage() {
         if (timeLeft === null) {
             return;
         }
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setMaxTimeLeft((current) =>
             current === null ? timeLeft : Math.max(current, timeLeft),
         );

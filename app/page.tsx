@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "@/convex/_generated/api";
-import { safeRangesFromRegex } from "@/lib/regex";
 import HighlightedText from "@/components/HighlightedText";
+import { api } from "@/convex/_generated/api";
+import { computeScoreFromMasks, safeRangesFromRegex } from "@/lib/regex";
+import { useMutation, useQuery } from "convex/react";
+import Link from "next/link";
+import { useEffect, useEffectEvent, useMemo, useState } from "react";
 
 const SESSION_KEY = "regex_kahoot_session";
 const UID_COOKIE = "regex_uid";
@@ -45,13 +45,38 @@ function getOrCreateUid() {
     return uid;
 }
 
+function getInitialUid() {
+    if (typeof document === "undefined") {
+        return null;
+    }
+    return getOrCreateUid();
+}
+
+function getStoredSession() {
+    if (typeof window === "undefined") {
+        return null;
+    }
+    const stored = localStorage.getItem(SESSION_KEY);
+    if (!stored) {
+        return null;
+    }
+    try {
+        return JSON.parse(stored) as Session;
+    } catch (error) {
+        localStorage.removeItem(SESSION_KEY);
+        console.error("Failed to parse session:", error);
+        return null;
+    }
+}
+
 export default function Home() {
     const joinGame = useMutation(api.game.joinGame);
     const submitRegex = useMutation(api.game.submitRegex);
-    const [session, setSession] = useState<Session | null>(null);
-    const [uid, setUid] = useState<string | null>(null);
-    const [nameInput, setNameInput] = useState("");
-    const [codeInput, setCodeInput] = useState("");
+    const initialSession = useMemo(() => getStoredSession(), []);
+    const [session, setSession] = useState<Session | null>(initialSession);
+    const [uid] = useState<string | null>(() => getInitialUid());
+    const [nameInput, setNameInput] = useState(initialSession?.name ?? "");
+    const [codeInput, setCodeInput] = useState(initialSession?.code ?? "");
     const [regexInput, setRegexInput] = useState("");
     const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
@@ -60,22 +85,6 @@ export default function Home() {
     >(null);
     const [isInputLocked, setIsInputLocked] = useState(false);
     const [kickedMessage, setKickedMessage] = useState<string | null>(null);
-
-    useEffect(() => {
-        setUid(getOrCreateUid());
-        const stored = localStorage.getItem(SESSION_KEY);
-        if (stored) {
-            try {
-                const parsed = JSON.parse(stored) as Session;
-                setSession(parsed);
-                setNameInput(parsed.name);
-                setCodeInput(parsed.code);
-            } catch (error) {
-                localStorage.removeItem(SESSION_KEY);
-                console.error("Failed to parse session:", error);
-            }
-        }
-    }, []);
 
     const gameState = useQuery(
         api.game.getGameState,
@@ -89,6 +98,7 @@ export default function Home() {
 
     useEffect(() => {
         if (!gameState?.question) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setTimeLeft(null);
             return;
         }
@@ -110,6 +120,7 @@ export default function Home() {
     ]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setRegexInput("");
         setStatusMessage(null);
         setLastSubmittedQuestion(null);
@@ -119,6 +130,7 @@ export default function Home() {
     useEffect(() => {
         if (gameState?.playerStatus === "kicked") {
             localStorage.removeItem(SESSION_KEY);
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setSession(null);
             setRegexInput("");
             setStatusMessage(null);
@@ -181,7 +193,14 @@ export default function Home() {
         };
     })();
 
-    const handleSubmit = useCallback(async () => {
+    const currentScore = (() => {
+        if (!gameState?.question || !regexInput.trim()) {
+            return null;
+        }
+        return computeScoreFromMasks(previewMasks.correct, previewMasks.user);
+    })();
+
+    const submitRegexEvent = useEffectEvent(async () => {
         if (!session || !regexInput.trim()) {
             return;
         }
@@ -209,7 +228,7 @@ export default function Home() {
                 error instanceof Error ? error.message : "Submission failed.",
             );
         }
-    }, [session, regexInput, submitRegex]);
+    });
 
     useEffect(() => {
         if (
@@ -232,8 +251,9 @@ export default function Home() {
             }
         }
         if (matches && lastSubmittedQuestion !== gameState.question.id) {
+            // eslint-disable-next-line react-hooks/set-state-in-effect
             setLastSubmittedQuestion(gameState.question.id);
-            void handleSubmit();
+            void submitRegexEvent();
         }
     }, [
         gameState?.question,
@@ -241,7 +261,6 @@ export default function Home() {
         lastSubmittedQuestion,
         previewMasks,
         regexInput,
-        handleSubmit,
     ]);
 
     const handleJoin = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -392,7 +411,7 @@ export default function Home() {
                                     text={gameState.question.targetString}
                                     ranges={gameState.question.highlightRanges}
                                     highlightClass="bg-[var(--match)] text-black"
-                                    className="text-4xl leading-[3.5rem]"
+                                    className="text-4xl leading-14"
                                 />
                                 <div className="flex flex-col gap-3">
                                     <label className="text-base uppercase">
@@ -426,12 +445,17 @@ export default function Home() {
                                         highlightClass="bg-[var(--match)] text-black"
                                         secondaryRanges={previewMasks.extra}
                                         secondaryClass="bg-emerald-200 text-black"
-                                        className="text-4xl leading-[3.5rem]"
+                                        className="text-4xl leading-14"
                                     />
+                                    {currentScore !== null ? (
+                                        <p className="text-base uppercase">
+                                            Current score: {currentScore}/100
+                                        </p>
+                                    ) : null}
                                 </div>
 
                                 {!gameState.questionOpen ? (
-                                    <div className="border-2 border-black bg-[var(--background)] p-4">
+                                    <div className="border-2 border-black bg-background p-4">
                                         {gameState.playerRank ? (
                                             <p className="text-xl font-semibold uppercase">
                                                 Your place:{" "}
@@ -447,7 +471,7 @@ export default function Home() {
                                 ) : null}
                             </div>
                         ) : gameState?.game.status === "finished" ? (
-                            <div className="mt-6 border-2 border-black bg-[var(--background)] p-4">
+                            <div className="mt-6 border-2 border-black bg-background p-4">
                                 {gameState.playerRank ? (
                                     <p className="text-xl font-semibold uppercase">
                                         Your final place: {gameState.playerRank}{" "}
@@ -460,7 +484,7 @@ export default function Home() {
                                 )}
                             </div>
                         ) : (
-                            <div className="mt-6 border-2 border-black bg-[var(--background)] p-4 text-xl uppercase">
+                            <div className="mt-6 border-2 border-black bg-background p-4 text-xl uppercase">
                                 {gameState?.game.status === "setup"
                                     ? "Host is loading questions."
                                     : "Waiting for the next question."}
