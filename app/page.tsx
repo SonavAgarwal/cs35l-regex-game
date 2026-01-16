@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { computeScoreFromMasks, safeRangesFromRegex } from "@/lib/regex";
 import { useMutation, useQuery } from "convex/react";
 import Link from "next/link";
+import Confetti from "react-confetti";
 import { useEffect, useEffectEvent, useMemo, useState } from "react";
 
 const SESSION_KEY = "regex_kahoot_session";
@@ -85,6 +86,11 @@ export default function Home() {
     >(null);
     const [isInputLocked, setIsInputLocked] = useState(false);
     const [kickedMessage, setKickedMessage] = useState<string | null>(null);
+    const [confettiSize, setConfettiSize] = useState({
+        width: 0,
+        height: 0,
+    });
+    const [confettiBurst, setConfettiBurst] = useState(0);
 
     const gameState = useQuery(
         api.game.getGameState,
@@ -126,6 +132,21 @@ export default function Home() {
         setLastSubmittedQuestion(null);
         setIsInputLocked(false);
     }, [gameState?.question?.id]);
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            return;
+        }
+        const updateSize = () => {
+            setConfettiSize({
+                width: window.innerWidth,
+                height: window.innerHeight,
+            });
+        };
+        updateSize();
+        window.addEventListener("resize", updateSize);
+        return () => window.removeEventListener("resize", updateSize);
+    }, []);
 
     useEffect(() => {
         if (gameState?.playerStatus === "kicked") {
@@ -193,6 +214,23 @@ export default function Home() {
         };
     })();
 
+    const isFullMatch = (() => {
+        if (!gameState?.question || !regexInput.trim()) {
+            return false;
+        }
+        const correct = previewMasks.correct;
+        const user = previewMasks.user;
+        if (correct.length === 0) {
+            return false;
+        }
+        for (let i = 0; i < correct.length; i += 1) {
+            if (correct[i] !== user[i]) {
+                return false;
+            }
+        }
+        return true;
+    })();
+
     const currentScore = (() => {
         if (!gameState?.question || !regexInput.trim()) {
             return null;
@@ -238,19 +276,7 @@ export default function Home() {
         ) {
             return;
         }
-        const correct = previewMasks.correct;
-        const user = previewMasks.user;
-        if (correct.length === 0) {
-            return;
-        }
-        let matches = true;
-        for (let i = 0; i < correct.length; i += 1) {
-            if (correct[i] !== user[i]) {
-                matches = false;
-                break;
-            }
-        }
-        if (matches && lastSubmittedQuestion !== gameState.question.id) {
+        if (isFullMatch && lastSubmittedQuestion !== gameState.question.id) {
             // eslint-disable-next-line react-hooks/set-state-in-effect
             setLastSubmittedQuestion(gameState.question.id);
             void submitRegexEvent();
@@ -258,10 +284,17 @@ export default function Home() {
     }, [
         gameState?.question,
         gameState?.questionOpen,
+        isFullMatch,
         lastSubmittedQuestion,
-        previewMasks,
         regexInput,
     ]);
+
+    useEffect(() => {
+        if (!isFullMatch || !gameState?.question?.id) {
+            return;
+        }
+        setConfettiBurst((value) => value + 1);
+    }, [isFullMatch, gameState?.question?.id]);
 
     const handleJoin = async (event: React.FormEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -299,6 +332,8 @@ export default function Home() {
         setStatusMessage(null);
         setIsInputLocked(false);
     };
+
+    const isTimeLow = timeLeft !== null && timeLeft <= 10;
 
     return (
         <main className="min-h-screen p-6">
@@ -397,7 +432,11 @@ export default function Home() {
                                     <span>
                                         Question: {gameState.question.index + 1}
                                     </span>
-                                    <span>
+                                    <span
+                                        className={
+                                            isTimeLow ? "text-red-600" : ""
+                                        }
+                                    >
                                         Time:{" "}
                                         {timeLeft !== null
                                             ? `${timeLeft}s`
@@ -422,13 +461,30 @@ export default function Home() {
                                         onChange={(event) =>
                                             setRegexInput(event.target.value)
                                         }
-                                        className="border-2 border-black bg-transparent px-3 py-3 text-4xl"
+                                        className={`border-2 bg-transparent px-3 py-3 text-4xl ${
+                                            isFullMatch
+                                                ? "border-emerald-500"
+                                                : "border-black"
+                                        }`}
                                         placeholder="/pattern/g"
                                         disabled={
                                             !gameState.questionOpen ||
                                             isInputLocked
                                         }
                                     />
+                                    {!isInputLocked &&
+                                    gameState.questionOpen ? (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                void submitRegexEvent()
+                                            }
+                                            disabled={!regexInput.trim()}
+                                            className="border-2 border-black bg-(--primary) px-4 py-3 text-sm font-semibold uppercase disabled:cursor-not-allowed disabled:opacity-50 hover:bg-black hover:text-white"
+                                        >
+                                            Submit Partial
+                                        </button>
+                                    ) : null}
                                     {statusMessage ? (
                                         <p className="text-base uppercase">
                                             {statusMessage}
@@ -493,6 +549,17 @@ export default function Home() {
                     </section>
                 )}
             </div>
+            {confettiBurst > 0 &&
+            confettiSize.width > 0 &&
+            confettiSize.height > 0 ? (
+                <Confetti
+                    key={confettiBurst}
+                    width={confettiSize.width}
+                    height={confettiSize.height}
+                    recycle={false}
+                    numberOfPieces={200}
+                />
+            ) : null}
         </main>
     );
 }
